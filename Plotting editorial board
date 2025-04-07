@@ -1,0 +1,147 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from collections import Counter
+import os
+from textwrap import wrap
+
+# Set up paths and style
+DATA_PATH = r"C:\Users\reube\Assignment 2 for Capstone project\editorial_board.csv"
+OUTPUT_FOLDER = r"C:\Users\reube\Assignment 2 for Capstone project\visualizations"
+plt.style.use('seaborn-v0_8')  # Modern matplotlib style
+sns.set_palette("husl")
+
+# Create output folder if it doesn't exist
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+def load_data():
+    """Load and preprocess the dataset"""
+    df = pd.read_csv(DATA_PATH)
+    
+    # Clean expertise data
+    df['Expertise'] = df['Expertise'].str.replace(r'\s*,\s*', ', ', regex=True)
+    df['Expertise'] = df['Expertise'].str.replace(r'\s{2,}', ' ', regex=True)
+    
+    return df
+
+def plot_institutional_distribution(df):
+    """Plot university/affiliation distribution"""
+    plt.figure(figsize=(12, 8))
+    counts = df['University'].value_counts().head(15)
+    
+    # Wrap long institution names
+    labels = ['\n'.join(wrap(x, 30)) for x in counts.index]
+    
+    ax = sns.barplot(x=counts.values, y=labels)
+    plt.title('Top 15 Institutional Affiliations', pad=20)
+    plt.xlabel('Number of Board Members')
+    plt.ylabel('Institution')
+    plt.tight_layout()
+    
+    # Save and close
+    plt.savefig(os.path.join(OUTPUT_FOLDER, 'institutional_distribution.png'), dpi=300)
+    plt.close()
+
+def plot_expertise_breakdown(df):
+    """Plot expertise area distribution"""
+    # Process expertise data
+    expertise_list = []
+    for exp in df['Expertise'].dropna():
+        expertise_list.extend([x.strip() for x in exp.split(',') if x.strip()])
+    
+    # Count and get top 15
+    counts = Counter(expertise_list)
+    top_expertise = pd.DataFrame(counts.most_common(15), columns=['Expertise', 'Count'])
+    
+    # Plot
+    plt.figure(figsize=(12, 8))
+    ax = sns.barplot(data=top_expertise, x='Count', y='Expertise')
+    plt.title('Top 15 Expertise Areas', pad=20)
+    plt.xlabel('Number of Members')
+    plt.ylabel('Expertise Area')
+    
+    # Add value labels
+    for p in ax.patches:
+        ax.annotate(f"{int(p.get_width())}", 
+                   (p.get_width(), p.get_y() + p.get_height()/2.),
+                   ha='left', va='center', xytext=(5, 0), textcoords='offset points')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_FOLDER, 'expertise_distribution.png'), dpi=300)
+    plt.close()
+
+def plot_country_distribution(df):
+    """Plot geographic distribution by country"""
+    # Extract country from university field
+    df['Country'] = df['University'].str.extract(r'([^,]+)$')[0].str.strip()
+    
+    # Manual corrections for common patterns
+    df['Country'] = df['Country'].replace({
+        'United States': 'USA',
+        'United Kingdom': 'UK',
+        'Korea, Republic of': 'South Korea'
+    })
+    
+    # Plot
+    plt.figure(figsize=(12, 8))
+    counts = df['Country'].value_counts().head(15)
+    ax = sns.barplot(x=counts.values, y=counts.index)
+    plt.title('Geographic Distribution (Top 15 Countries)', pad=20)
+    plt.xlabel('Number of Members')
+    plt.ylabel('Country')
+    
+    # Add value labels
+    for p in ax.patches:
+        ax.annotate(f"{int(p.get_width())}", 
+                   (p.get_width(), p.get_y() + p.get_height()/2.),
+                   ha='left', va='center', xytext=(5, 0), textcoords='offset points')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_FOLDER, 'country_distribution.png'), dpi=300)
+    plt.close()
+
+def generate_summary_report(df):
+    """Create a text summary of key findings"""
+    report = f"""Editorial Board Composition Report
+{'='*40}
+
+Total Members: {len(df)}
+Unique Institutions: {df['University'].nunique()}
+
+Top 5 Institutions:
+{df['University'].value_counts().head(5).to_string()}
+
+Expertise Diversity:
+- Total unique expertise areas: {len(set([x for exp in df['Expertise'].dropna() for x in exp.split(',')]))}
+- Most common expertise: {Counter([x for exp in df['Expertise'].dropna() for x in exp.split(',')]).most_common(1)[0]}
+
+Geographic Distribution:
+{df['University'].str.extract(r'([^,]+)$')[0].str.strip().value_counts().head(10).to_string()}
+"""
+    with open(os.path.join(OUTPUT_FOLDER, 'board_summary_report.txt'), 'w') as f:
+        f.write(report)
+
+def main():
+    print("Analyzing editorial board composition...")
+    
+    try:
+        df = load_data()
+        
+        print("\nGenerating visualizations:")
+        print("- Institutional distribution")
+        plot_institutional_distribution(df)
+        
+        print("- Expertise breakdown")
+        plot_expertise_breakdown(df)
+        
+        print("- Geographic distribution")
+        plot_country_distribution(df)
+        
+        print("- Summary report")
+        generate_summary_report(df)
+        
+        print(f"\nAll outputs saved to: {OUTPUT_FOLDER}")
+        
+
+if __name__ == "__main__":
+    main()
