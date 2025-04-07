@@ -17,6 +17,7 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 def load_data():
     """Load and preprocess the dataset"""
     df = pd.read_csv(DATA_PATH)
+    df = df.copy()  # Avoid SettingWithCopyWarning
     
     # Clean expertise data
     df['Expertise'] = df['Expertise'].str.replace(r'\s*,\s*', ', ', regex=True)
@@ -30,7 +31,7 @@ def plot_institutional_distribution(df):
     counts = df['University'].value_counts().head(15)
     
     # Wrap long institution names
-    labels = ['\n'.join(wrap(x, 30)) for x in counts.index]
+    labels = [('\n'.join(wrap(x, 30)) if len(x) > 30 else x) for x in counts.index]
     
     ax = sns.barplot(x=counts.values, y=labels)
     plt.title('Top 15 Institutional Affiliations', pad=20)
@@ -73,7 +74,7 @@ def plot_expertise_breakdown(df):
 def plot_country_distribution(df):
     """Plot geographic distribution by country"""
     # Extract country from university field
-    df['Country'] = df['University'].str.extract(r'([^,]+)$')[0].str.strip()
+    df['Country'] = df['University'].str.split(',').str[-1].str.strip()
     
     # Manual corrections for common patterns
     df['Country'] = df['Country'].replace({
@@ -102,6 +103,14 @@ def plot_country_distribution(df):
 
 def generate_summary_report(df):
     """Create a text summary of key findings"""
+    total_expertise_set = set()
+    all_expertise = []
+
+    for exp in df['Expertise'].dropna():
+        items = [x.strip() for x in exp.split(',')]
+        total_expertise_set.update(items)
+        all_expertise.extend(items)
+    
     report = f"""Editorial Board Composition Report
 {'='*40}
 
@@ -112,36 +121,38 @@ Top 5 Institutions:
 {df['University'].value_counts().head(5).to_string()}
 
 Expertise Diversity:
-- Total unique expertise areas: {len(set([x for exp in df['Expertise'].dropna() for x in exp.split(',')]))}
-- Most common expertise: {Counter([x for exp in df['Expertise'].dropna() for x in exp.split(',')]).most_common(1)[0]}
+- Total unique expertise areas: {len(total_expertise_set)}
+- Most common expertise: {Counter(all_expertise).most_common(1)[0]}
 
 Geographic Distribution:
-{df['University'].str.extract(r'([^,]+)$')[0].str.strip().value_counts().head(10).to_string()}
+{df['Country'].value_counts().head(10).to_string()}
 """
     with open(os.path.join(OUTPUT_FOLDER, 'board_summary_report.txt'), 'w') as f:
         f.write(report)
 
 def main():
     print("Analyzing editorial board composition...")
-    
+
     try:
         df = load_data()
-        
+
         print("\nGenerating visualizations:")
         print("- Institutional distribution")
         plot_institutional_distribution(df)
-        
+
         print("- Expertise breakdown")
         plot_expertise_breakdown(df)
-        
+
         print("- Geographic distribution")
         plot_country_distribution(df)
-        
+
         print("- Summary report")
         generate_summary_report(df)
-        
+
         print(f"\nAll outputs saved to: {OUTPUT_FOLDER}")
-        
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()
