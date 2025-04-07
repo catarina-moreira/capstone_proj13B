@@ -1,0 +1,37 @@
+# Step 1: Upload HTML
+from google.colab import files
+uploaded = files.upload()
+
+# Step 2: Parse HTML
+from bs4 import BeautifulSoup
+
+html_file = list(uploaded.keys())[0]
+
+with open(html_file, 'r', encoding='utf-8') as f:
+    soup = BeautifulSoup(f, 'html.parser')
+
+# Step 3: Extract raw text from relevant <p> tags
+elements = soup.find_all("p", class_="js-footnote branded text-s u-clr-grey6")
+raw_texts = [el.get_text(strip=True) for el in elements if el.get_text(strip=True)]
+
+# Step 4: Split, clean, lowercase
+import re
+
+categories = []
+for line in raw_texts:
+    parts = re.split(r'[,.]', line)
+    cleaned = [p.strip().lower() for p in parts if p.strip()]
+    categories.extend(cleaned)
+
+# Step 5: Remove duplicates and sort
+unique_sorted_categories = sorted(set(categories))
+
+# Step 6: Export to Excel
+import pandas as pd
+
+df = pd.DataFrame(unique_sorted_categories, columns=["category"])
+excel_filename = "cleaned_categories.xlsx"
+df.to_excel(excel_filename, index=False)
+
+# Step 7: Download file
+files.download(excel_filename)
