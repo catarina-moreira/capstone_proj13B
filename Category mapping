@@ -1,0 +1,53 @@
+# Step 1: Install dependencies
+!pip install pandas openpyxl rapidfuzz
+
+# Step 2: Upload Excel file
+from google.colab import files
+uploaded = files.upload()
+
+# Step 3: Load the Excel file
+import pandas as pd
+from rapidfuzz import process, fuzz
+from collections import defaultdict
+
+excel_file = list(uploaded.keys())[0]
+df = pd.read_excel(excel_file)
+
+# Ensure column exists
+if "category" not in df.columns:
+    raise ValueError("The uploaded Excel file must contain a 'category' column.")
+
+categories = df['category'].dropna().unique().tolist()
+
+# Step 4: Group similar categories
+canonical_map = {}
+clusters = defaultdict(list)
+used = set()
+similarity_threshold = 50  # Tune this if needed
+
+for term in categories:
+    if term in used:
+        continue
+
+    matches = process.extract(term, categories, scorer=fuzz.ratio, limit=None)
+    close_terms = [match for match, score, _ in matches if score >= similarity_threshold]
+
+    canonical_label = min(close_terms, key=len)  # Use shortest matching label as canonical
+
+    for ct in close_terms:
+        canonical_map[ct] = canonical_label
+        used.add(ct)
+        clusters[canonical_label].append(ct)
+
+# Step 5: Save mapping (original → canonical)
+mapping_df = pd.DataFrame(list(canonical_map.items()), columns=["original", "canonical"])
+mapping_df.to_excel("category_mapping.xlsx", index=False)
+
+# Step 6: Save final list of categories
+final_categories = sorted(set(canonical_map.values()))
+final_df = pd.DataFrame(final_categories, columns=["final_category"])
+final_df.to_excel("final_categories.xlsx", index=False)
+
+# Step 7: Download the result
+files.download("category_mapping.xlsx")
+files.download("final_categories.xlsx")
