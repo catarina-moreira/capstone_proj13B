@@ -1,0 +1,89 @@
+# ===================== Step 1: Upload Dataset =====================
+from google.colab import files
+uploaded = files.upload()
+
+# ===================== Step 2: Load and Prepare Data =====================
+import pandas as pd
+from bertopic import BERTopic
+from sklearn.feature_extraction.text import CountVectorizer
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+# Load uploaded file
+csv_file = list(uploaded.keys())[0]
+df = pd.read_csv(csv_file)
+
+# Combine Title and Abstract into one field for topic modeling
+df['text'] = df['Title'].fillna('') + ". " + df['Abstract'].fillna('')
+sentenceList = df['text'].tolist()
+
+# ===================== Step 3: Fit BERTopic =====================
+# Initialize CountVectorizer with ngrams for better topic richness
+vectorizer_model = CountVectorizer(ngram_range=(1, 2), stop_words="english")
+
+# Fit BERTopic model
+topic_model = BERTopic(calculate_probabilities=True, vectorizer_model=vectorizer_model)
+topics, probs = topic_model.fit_transform(sentenceList)
+
+# Add topic column to the DataFrame
+df['topic'] = topics
+
+# ===================== Step 4: Keywords per Year =====================
+topic_keywords = topic_model.get_topics()
+
+
+yearly_topic_summary = {}
+
+for year in sorted(df['Year'].dropna().unique()):
+    year_df = df[df['Year'] == year]
+    topic_counts = year_df['topic'].value_counts().to_dict()
+
+    yearly_topics = []
+    for topic_id, count in topic_counts.items():
+        if topic_id == -1:
+            continue
+        keywords = [word for word, _ in topic_keywords.get(topic_id, [])][:5]
+        yearly_topics.append({
+            'topic_id': topic_id,
+            'keywords': keywords,
+            'count': count
+        })
+
+    yearly_topic_summary[year] = yearly_topics
+
+# Print yearly topic summaries
+for year, topics in yearly_topic_summary.items():
+    print(f"\n📅 Year: {year}")
+    for t in topics:
+        print(f"  🔹 Topic {t['topic_id']} ({t['count']} papers): {', '.join(t['keywords'])}")
+
+# ===================== Step 5: BERTopic Visualizations =====================
+print("\n🔍 Visualizing BERTopic Output...\n")
+topic_model.visualize_barchart().show()
+topic_model.visualize_heatmap().show()
+topic_model.visualize_hierarchy().show()
+
+# ===================== Step 6: Similarity Matrix =====================
+print("\n📊 Generating Topic Similarity Matrix...\n")
+
+
+topic_info = topic_model.get_topic_info()
+valid_topic_ids = topic_info[topic_info.Topic != -1]["Topic"].tolist()
+
+
+topic_embeddings = topic_model.c_tf_idf_.toarray()
+filtered_embeddings = topic_embeddings[valid_topic_ids]
+
+
+similarity_matrix = cosine_similarity(filtered_embeddings)
+sim_df = pd.DataFrame(similarity_matrix, index=valid_topic_ids, columns=valid_topic_ids)
+
+# Plot similarity matrix
+plt.figure(figsize=(12, 10))
+sns.heatmap(sim_df, cmap="coolwarm", annot=True, fmt=".2f", square=True, cbar=True)
+plt.title("Topic Similarity Matrix (Cosine Similarity)", fontsize=16)
+plt.xlabel("Topic ID")
+plt.ylabel("Topic ID")
+plt.show()
